@@ -48,7 +48,6 @@ def get_recent_orders(access_token):
 
     orders = data.get("data", {}).get("list", [])
 
-    # order_time이 Unix timestamp인 경우 필터링
     cutoff_ts = int(cutoff.timestamp())
     recent = []
     for order in orders:
@@ -56,15 +55,31 @@ def get_recent_orders(access_token):
         if isinstance(order_time, (int, float)) and order_time >= cutoff_ts:
             recent.append(order)
         elif isinstance(order_time, str):
-            # 문자열 형식 처리 (예: "2026-05-21 14:30:00")
             try:
                 ot = datetime.strptime(order_time[:19], "%Y-%m-%d %H:%M:%S")
                 if ot >= cutoff:
                     recent.append(order)
             except ValueError:
-                recent.append(order)  # 파싱 실패 시 포함
+                recent.append(order)
 
     return recent
+
+
+STATUS_LABELS = {
+    "order": "주문 완료",
+    "pay_done": "결제 완료",
+    "ready": "상품 준비 중",
+    "delivery": "배송 중",
+    "delivery_done": "배송 완료",
+    "cancel_request": "취소 요청",
+    "cancel": "주문 취소",
+    "cancel_done": "취소 완료",
+    "refund_request": "환불 요청",
+    "refund": "환불 중",
+    "refund_done": "환불 완료",
+}
+
+CANCEL_STATUSES = {"cancel_request", "cancel", "cancel_done", "refund_request", "refund", "refund_done"}
 
 
 def format_order_message(order):
@@ -72,6 +87,7 @@ def format_order_message(order):
     pay_price = order.get("pay_price", 0)
     orderer = order.get("orderer", {})
     orderer_name = orderer.get("name", "알 수 없음")
+    order_status = str(order.get("order_status", "")).lower()
 
     items = order.get("items", [])
     item_names = [item.get("prod_name", "") for item in items[:3]]
@@ -80,17 +96,21 @@ def format_order_message(order):
         items_str += f" 외 {len(items) - 3}개"
 
     price_str = f"{int(pay_price):,}원"
+    status_label = STATUS_LABELS.get(order_status, order_status or "알 수 없음")
+    is_cancel = order_status in CANCEL_STATUSES
+    header_text = f"주문 취소 알림 — {order_code}" if is_cancel else "새 주문이 들어왔어요!"
 
     return {
         "blocks": [
             {
                 "type": "header",
-                "text": {"type": "plain_text", "text": "새 주문이 들어왔어요!"},
+                "text": {"type": "plain_text", "text": header_text},
             },
             {
                 "type": "section",
                 "fields": [
                     {"type": "mrkdwn", "text": f"*주문번호*\n{order_code}"},
+                    {"type": "mrkdwn", "text": f"*상태*\n{status_label}"},
                     {"type": "mrkdwn", "text": f"*결제금액*\n{price_str}"},
                     {"type": "mrkdwn", "text": f"*주문자*\n{orderer_name}"},
                     {"type": "mrkdwn", "text": f"*상품*\n{items_str}"},
