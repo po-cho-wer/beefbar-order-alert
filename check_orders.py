@@ -16,9 +16,13 @@ def get_access_token():
     )
     res.raise_for_status()
     data = res.json()
+    print(f"아임웹 인증 응답: {data}")
     if data.get("code") != 200:
         raise Exception(f"아임웹 인증 실패: {data}")
-    return data["data"]["access_token"]
+    # 응답 구조: {"code":200, "data": {"access_token":...}} 또는 {"code":200, "access_token":...}
+    if "data" in data:
+        return data["data"]["access_token"]
+    return data["access_token"]
 
 
 def get_recent_orders(access_token):
