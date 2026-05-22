@@ -1,12 +1,13 @@
 import requests
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 IMWEB_API_KEY = os.environ["IMWEB_API_KEY"]
 IMWEB_SECRET_KEY = os.environ["IMWEB_SECRET_KEY"]
 SLACK_WEBHOOK_URL = os.environ["SLACK_WEBHOOK_URL"]
 
 LOOKBACK_MINUTES = 11  # 10분 간격 실행 + 1분 여유
+KST = timezone(timedelta(hours=9))
 
 
 def get_access_token():
@@ -26,15 +27,20 @@ def get_access_token():
 
 
 def get_recent_orders(access_token):
-    now = datetime.now()
-    cutoff = now - timedelta(minutes=LOOKBACK_MINUTES)
+    now_utc = datetime.now(timezone.utc)
+    cutoff_utc = now_utc - timedelta(minutes=LOOKBACK_MINUTES)
+
+    # 아임웹은 KST 기준 — 날짜 경계 오류 방지를 위해 어제(KST)부터 조회
+    now_kst = now_utc.astimezone(KST)
+    yesterday_kst = (now_kst - timedelta(days=1)).strftime("%Y-%m-%d")
+    today_kst = now_kst.strftime("%Y-%m-%d")
 
     res = requests.get(
         "https://api.imweb.me/v2/shop/orders",
         headers={"access-token": access_token},
         params={
-            "start_date": cutoff.strftime("%Y-%m-%d"),
-            "end_date": now.strftime("%Y-%m-%d"),
+            "start_date": yesterday_kst,
+            "end_date": today_kst,
             "limit": 100,
             "page": 1,
         },
@@ -48,16 +54,19 @@ def get_recent_orders(access_token):
 
     orders = data.get("data", {}).get("list", [])
 
-    cutoff_ts = int(cutoff.timestamp())
+    cutoff_ts = cutoff_utc.timestamp()
     recent = []
     for order in orders:
         order_time = order.get("order_time", 0)
-        if isinstance(order_time, (int, float)) and order_time >= cutoff_ts:
-            recent.append(order)
+        if isinstance(order_time, (int, float)) and order_time > 0:
+            # Unix timestamp은 UTC 절대값이므로 직접 비교
+            if order_time >= cutoff_ts:
+                recent.append(order)
         elif isinstance(order_time, str):
             try:
-                ot = datetime.strptime(order_time[:19], "%Y-%m-%d %H:%M:%S")
-                if ot >= cutoff:
+                # 아임웹 문자열은 KST 기준 → KST aware로 파싱 후 비교
+                ot_kst = datetime.strptime(order_time[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=KST)
+                if ot_kst >= cutoff_utc:
                     recent.append(order)
             except ValueError:
                 recent.append(order)
