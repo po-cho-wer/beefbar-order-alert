@@ -148,6 +148,10 @@ def main():
     orders = get_recent_orders(token)
     print(f"API 반환 주문 수: {len(orders)}건")
 
+    # 첫 번째 주문으로 상세 API 구조 확인 (디버그용)
+    if orders:
+        get_order_items(token, orders[0].get("order_code", ""))
+
     new_count = 0
     for order in orders:
         order_code = order.get("order_code", "")
