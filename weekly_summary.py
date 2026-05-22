@@ -6,7 +6,6 @@ IMWEB_API_KEY = os.environ["IMWEB_API_KEY"]
 IMWEB_SECRET_KEY = os.environ["IMWEB_SECRET_KEY"]
 SLACK_WEBHOOK_URL = os.environ["SLACK_WEBHOOK_URL"]
 
-CANCEL_STATUSES = {"cancel_request", "cancel", "cancel_done", "refund_request", "refund", "refund_done"}
 
 
 def get_access_token():
@@ -67,24 +66,18 @@ def get_weekly_orders(access_token):
 
 
 def calculate_summary(orders):
-    total_orders = 0
-    cancel_orders = 0
+    total_orders = len(orders)
     total_revenue = 0
 
     for order in orders:
-        status = str(order.get("order_status", "")).lower()
-        pay_price = order.get("pay_price", 0) or 0
+        payment = order.get("payment", {})
+        payment_amount = payment.get("payment_amount", 0) or 0
+        total_revenue += int(payment_amount)
 
-        if status in CANCEL_STATUSES:
-            cancel_orders += 1
-        else:
-            total_orders += 1
-            total_revenue += int(pay_price)
-
-    return total_orders, cancel_orders, total_revenue
+    return total_orders, total_revenue
 
 
-def send_weekly_summary(total_orders, cancel_orders, total_revenue, start_date, end_date):
+def send_weekly_summary(total_orders, total_revenue, start_date, end_date):
     period = f"{start_date} ~ {end_date}"
     revenue_str = f"{total_revenue:,}원"
 
@@ -102,7 +95,6 @@ def send_weekly_summary(total_orders, cancel_orders, total_revenue, start_date, 
                 "type": "section",
                 "fields": [
                     {"type": "mrkdwn", "text": f"*주문 수*\n{total_orders}건"},
-                    {"type": "mrkdwn", "text": f"*취소/환불*\n{cancel_orders}건"},
                     {"type": "mrkdwn", "text": f"*매출*\n{revenue_str}"},
                 ],
             },
@@ -122,10 +114,10 @@ def main():
 
     print(f"조회된 주문 수: {len(orders)}건")
 
-    total_orders, cancel_orders, total_revenue = calculate_summary(orders)
-    send_weekly_summary(total_orders, cancel_orders, total_revenue, start_date, end_date)
+    total_orders, total_revenue = calculate_summary(orders)
+    send_weekly_summary(total_orders, total_revenue, start_date, end_date)
 
-    print(f"리포트 전송 완료 — 주문 {total_orders}건 / 취소 {cancel_orders}건 / 매출 {total_revenue:,}원")
+    print(f"리포트 전송 완료 — 주문 {total_orders}건 / 매출 {total_revenue:,}원")
 
 
 if __name__ == "__main__":
