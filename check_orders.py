@@ -1,12 +1,14 @@
 import requests
 import os
+import json
 from datetime import datetime, timedelta, timezone
 
 IMWEB_API_KEY = os.environ["IMWEB_API_KEY"]
 IMWEB_SECRET_KEY = os.environ["IMWEB_SECRET_KEY"]
 SLACK_WEBHOOK_URL = os.environ["SLACK_WEBHOOK_URL"]
 
-LOOKBACK_MINUTES = 11  # 10분 간격 실행 + 1분 여유
+LOOKBACK_DAYS = 2  # 최근 2일치 조회 (Actions 실행 간격 무관하게 안전하게)
+SENT_ORDERS_FILE = "sent_orders.json"
 KST = timezone(timedelta(hours=9))
 
 
@@ -17,30 +19,36 @@ def get_access_token():
     )
     res.raise_for_status()
     data = res.json()
-    print(f"아임웹 인증 응답: {data}")
     if data.get("code") != 200:
         raise Exception(f"아임웹 인증 실패: {data}")
-    # 응답 구조: {"code":200, "data": {"access_token":...}} 또는 {"code":200, "access_token":...}
     if "data" in data:
         return data["data"]["access_token"]
     return data["access_token"]
 
 
-def get_recent_orders(access_token):
-    now_utc = datetime.now(timezone.utc)
-    cutoff_utc = now_utc - timedelta(minutes=LOOKBACK_MINUTES)
+def load_sent_orders():
+    if os.path.exists(SENT_ORDERS_FILE):
+        with open(SENT_ORDERS_FILE) as f:
+            return set(json.load(f))
+    return set()
 
-    # 아임웹은 KST 기준 — 날짜 경계 오류 방지를 위해 어제(KST)부터 조회
-    now_kst = now_utc.astimezone(KST)
-    yesterday_kst = (now_kst - timedelta(days=1)).strftime("%Y-%m-%d")
-    today_kst = now_kst.strftime("%Y-%m-%d")
+
+def save_sent_orders(sent):
+    with open(SENT_ORDERS_FILE, "w") as f:
+        json.dump(list(sent), f)
+
+
+def get_recent_orders(access_token):
+    now_kst = datetime.now(timezone.utc).astimezone(KST)
+    start_kst = (now_kst - timedelta(days=LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+    end_kst = now_kst.strftime("%Y-%m-%d")
 
     res = requests.get(
         "https://api.imweb.me/v2/shop/orders",
         headers={"access-token": access_token},
         params={
-            "start_date": yesterday_kst,
-            "end_date": today_kst,
+            "start_date": start_kst,
+            "end_date": end_kst,
             "limit": 100,
             "page": 1,
         },
@@ -52,34 +60,7 @@ def get_recent_orders(access_token):
         print(f"주문 조회 응답: {data}")
         return []
 
-    orders = data.get("data", {}).get("list", [])
-
-    print(f"API 반환 주문 수: {len(orders)}건")
-    print(f"cutoff_utc: {cutoff_utc.isoformat()}, cutoff_ts: {cutoff_utc.timestamp()}")
-
-    cutoff_ts = cutoff_utc.timestamp()
-    recent = []
-    for order in orders:
-        order_time = order.get("order_time", 0)
-        order_code = order.get("order_code", "?")
-        print(f"  주문 {order_code}: order_time={order_time!r} (type={type(order_time).__name__})")
-        if isinstance(order_time, (int, float)) and order_time > 0:
-            passed = order_time >= cutoff_ts
-            print(f"    → timestamp 비교: {order_time} >= {cutoff_ts} = {passed}")
-            if passed:
-                recent.append(order)
-        elif isinstance(order_time, str):
-            try:
-                ot_kst = datetime.strptime(order_time[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=KST)
-                passed = ot_kst >= cutoff_utc
-                print(f"    → 문자열 비교(KST): {ot_kst.isoformat()} >= {cutoff_utc.isoformat()} = {passed}")
-                if passed:
-                    recent.append(order)
-            except ValueError:
-                print(f"    → 파싱 실패, 포함 처리")
-                recent.append(order)
-
-    return recent
+    return data.get("data", {}).get("list", [])
 
 
 STATUS_LABELS = {
@@ -144,20 +125,28 @@ def send_slack(payload):
 
 
 def main():
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 주문 확인 시작")
+    print(f"[{datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')} KST] 주문 확인 시작")
+
+    sent_orders = load_sent_orders()
+    print(f"이미 처리된 주문 수: {len(sent_orders)}건")
 
     token = get_access_token()
     orders = get_recent_orders(token)
+    print(f"API 반환 주문 수: {len(orders)}건")
 
-    print(f"최근 {LOOKBACK_MINUTES}분 신규 주문: {len(orders)}건")
-
+    new_count = 0
     for order in orders:
+        order_code = order.get("order_code", "")
+        if not order_code or order_code in sent_orders:
+            continue
         msg = format_order_message(order)
         send_slack(msg)
-        print(f"알림 전송 완료: {order.get('order_code')}")
+        sent_orders.add(order_code)
+        new_count += 1
+        print(f"알림 전송: {order_code}")
 
-    if not orders:
-        print("새 주문 없음")
+    save_sent_orders(sent_orders)
+    print(f"신규 알림 전송: {new_count}건")
 
 
 if __name__ == "__main__":
