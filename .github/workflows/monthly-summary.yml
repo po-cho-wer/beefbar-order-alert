@@ -1,0 +1,27 @@
+name: 비프바 월간 리포트
+
+on:
+  schedule:
+    - cron: '0 1 1 * *'  # 매월 1일 10:00 KST (01:00 UTC)
+  workflow_dispatch:       # GitHub에서 수동 실행 가능
+
+jobs:
+  monthly-summary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 패키지 설치
+        run: pip install requests
+
+      - name: 월간 리포트 전송
+        env:
+          IMWEB_API_KEY: ${{ secrets.IMWEB_API_KEY }}
+          IMWEB_SECRET_KEY: ${{ secrets.IMWEB_SECRET_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: python monthly_summary.py
