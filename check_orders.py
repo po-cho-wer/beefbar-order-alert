@@ -134,6 +134,9 @@ def main():
     orders = get_recent_orders(token)
     print(f"API 반환 주문 수: {len(orders)}건")
 
+    if orders:
+        print(f"[디버그] 첫 번째 주문 원시 데이터: {json.dumps(orders[0], ensure_ascii=False, indent=2)}")
+
     new_count = 0
     for order in orders:
         order_code = order.get("order_code", "")
