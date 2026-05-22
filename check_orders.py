@@ -72,7 +72,7 @@ def get_order_items(access_token, order_code):
         print(f"상세 API 오류: {res.status_code} {res.text}")
         return []
     data = res.json()
-    print(f"[디버그] 상세 API 응답 키: {list(data.get('data', {}).keys())}")
+    print(f"[디버그] 상세 API 전체 응답: {json.dumps(data, ensure_ascii=False)[:500]}")
     if data.get("code") != 200:
         return []
     order = data.get("data", {})
