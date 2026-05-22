@@ -63,9 +63,9 @@ def get_recent_orders(access_token):
     return data.get("data", {}).get("list", [])
 
 
-def get_order_items(access_token, order_code):
+def get_order_items(access_token, order_no):
     res = requests.get(
-        f"https://api.imweb.me/v2/shop/orders/{order_code}",
+        f"https://api.imweb.me/v2/shop/orders/{order_no}",
         headers={"access-token": access_token},
     )
     if res.status_code != 200:
@@ -150,14 +150,15 @@ def main():
 
     # 첫 번째 주문으로 상세 API 구조 확인 (디버그용)
     if orders:
-        get_order_items(token, orders[0].get("order_code", ""))
+        get_order_items(token, orders[0].get("order_no", ""))
 
     new_count = 0
     for order in orders:
         order_code = order.get("order_code", "")
         if not order_code or order_code in sent_orders:
             continue
-        items = get_order_items(token, order_code)
+        order_no = order.get("order_no", "")
+        items = get_order_items(token, order_no)
         msg = format_order_message(order, items)
         send_slack(msg)
         sent_orders.add(order_code)
