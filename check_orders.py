@@ -63,6 +63,20 @@ def get_recent_orders(access_token):
     return data.get("data", {}).get("list", [])
 
 
+def get_order_items(access_token, order_code):
+    res = requests.get(
+        f"https://api.imweb.me/v2/shop/orders/{order_code}",
+        headers={"access-token": access_token},
+    )
+    if res.status_code != 200:
+        return []
+    data = res.json()
+    if data.get("code") != 200:
+        return []
+    order = data.get("data", {})
+    return order.get("items", [])
+
+
 PAY_TYPE_LABELS = {
     "npay": "네이버페이",
     "kakaopay": "카카오페이",
@@ -75,17 +89,21 @@ PAY_TYPE_LABELS = {
 }
 
 
-def format_order_message(order):
+def format_order_message(order, items):
     order_code = order.get("order_code", "N/A")
     orderer = order.get("orderer", {})
     orderer_name = orderer.get("name", "알 수 없음")
 
     payment = order.get("payment", {})
-    total_price = payment.get("total_price", 0)        # 상품 금액
-    deliv_price = payment.get("deliv_price", 0)        # 배송비
-    payment_amount = payment.get("payment_amount", 0)  # 최종 결제금액
+    deliv_price = payment.get("deliv_price", 0)
+    payment_amount = payment.get("payment_amount", 0)
     pay_type = payment.get("pay_type", "")
     pay_type_label = PAY_TYPE_LABELS.get(pay_type, pay_type or "알 수 없음")
+
+    item_names = [item.get("prod_name", "") for item in items[:3] if item.get("prod_name")]
+    items_str = ", ".join(item_names) or "상품 정보 없음"
+    if len(items) > 3:
+        items_str += f" 외 {len(items) - 3}개"
 
     return {
         "blocks": [
@@ -100,6 +118,7 @@ def format_order_message(order):
                     {"type": "mrkdwn", "text": f"*주문자*\n{orderer_name}"},
                     {"type": "mrkdwn", "text": f"*결제금액*\n{int(payment_amount):,}원 (배송비 {int(deliv_price):,}원 포함)"},
                     {"type": "mrkdwn", "text": f"*결제수단*\n{pay_type_label}"},
+                    {"type": "mrkdwn", "text": f"*상품*\n{items_str}"},
                 ],
             },
             {"type": "divider"},
@@ -127,7 +146,8 @@ def main():
         order_code = order.get("order_code", "")
         if not order_code or order_code in sent_orders:
             continue
-        msg = format_order_message(order)
+        items = get_order_items(token, order_code)
+        msg = format_order_message(order, items)
         send_slack(msg)
         sent_orders.add(order_code)
         new_count += 1
