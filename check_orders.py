@@ -65,19 +65,20 @@ def get_recent_orders(access_token):
 
 def get_order_items(access_token, order_no):
     res = requests.get(
-        f"https://api.imweb.me/v2/shop/orders/{order_no}/prods",
+        "https://api.imweb.me/v2/shop/order-prods",
         headers={"access-token": access_token},
+        params={"order_no": order_no},
     )
-    print(f"[디버그] prods API 응답: {res.text[:500]}")
+    print(f"[디버그] order-prods API 응답: {res.text[:500]}")
     if res.status_code != 200:
         return []
     data = res.json()
     if data.get("code") != 200:
         return []
-    items = data.get("data", {}).get("list", data.get("data", []))
-    if isinstance(items, dict):
-        items = list(items.values())
-    return items if isinstance(items, list) else []
+    result = data.get("data", [])
+    if isinstance(result, dict):
+        result = result.get("list", [])
+    return result if isinstance(result, list) else []
 
 
 PAY_TYPE_LABELS = {
