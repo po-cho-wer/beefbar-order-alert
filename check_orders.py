@@ -87,12 +87,6 @@ def format_order_message(order):
     pay_type = payment.get("pay_type", "")
     pay_type_label = PAY_TYPE_LABELS.get(pay_type, pay_type or "알 수 없음")
 
-    delivery = order.get("delivery", {})
-    address = delivery.get("address", {})
-    address_str = address.get("address", "")
-    postcode = address.get("postcode", "")
-    address_brief = f"{postcode} {address_str}".strip() or "알 수 없음"
-
     return {
         "blocks": [
             {
@@ -106,7 +100,6 @@ def format_order_message(order):
                     {"type": "mrkdwn", "text": f"*주문자*\n{orderer_name}"},
                     {"type": "mrkdwn", "text": f"*결제금액*\n{int(payment_amount):,}원 (배송비 {int(deliv_price):,}원 포함)"},
                     {"type": "mrkdwn", "text": f"*결제수단*\n{pay_type_label}"},
-                    {"type": "mrkdwn", "text": f"*배송지*\n{address_brief}"},
                 ],
             },
             {"type": "divider"},
