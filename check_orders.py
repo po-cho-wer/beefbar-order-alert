@@ -63,55 +63,50 @@ def get_recent_orders(access_token):
     return data.get("data", {}).get("list", [])
 
 
-STATUS_LABELS = {
-    "order": "주문 완료",
-    "pay_done": "결제 완료",
-    "ready": "상품 준비 중",
-    "delivery": "배송 중",
-    "delivery_done": "배송 완료",
-    "cancel_request": "취소 요청",
-    "cancel": "주문 취소",
-    "cancel_done": "취소 완료",
-    "refund_request": "환불 요청",
-    "refund": "환불 중",
-    "refund_done": "환불 완료",
+PAY_TYPE_LABELS = {
+    "npay": "네이버페이",
+    "kakaopay": "카카오페이",
+    "card": "신용카드",
+    "bank": "계좌이체",
+    "vbank": "가상계좌",
+    "phone": "휴대폰결제",
+    "point": "포인트",
+    "free": "무료",
 }
-
-CANCEL_STATUSES = {"cancel_request", "cancel", "cancel_done", "refund_request", "refund", "refund_done"}
 
 
 def format_order_message(order):
     order_code = order.get("order_code", "N/A")
-    pay_price = order.get("pay_price", 0)
     orderer = order.get("orderer", {})
     orderer_name = orderer.get("name", "알 수 없음")
-    order_status = str(order.get("order_status", "")).lower()
 
-    items = order.get("items", [])
-    item_names = [item.get("prod_name", "") for item in items[:3]]
-    items_str = ", ".join(filter(None, item_names)) or "상품 정보 없음"
-    if len(items) > 3:
-        items_str += f" 외 {len(items) - 3}개"
+    payment = order.get("payment", {})
+    total_price = payment.get("total_price", 0)        # 상품 금액
+    deliv_price = payment.get("deliv_price", 0)        # 배송비
+    payment_amount = payment.get("payment_amount", 0)  # 최종 결제금액
+    pay_type = payment.get("pay_type", "")
+    pay_type_label = PAY_TYPE_LABELS.get(pay_type, pay_type or "알 수 없음")
 
-    price_str = f"{int(pay_price):,}원"
-    status_label = STATUS_LABELS.get(order_status, order_status or "알 수 없음")
-    is_cancel = order_status in CANCEL_STATUSES
-    header_text = f"주문 취소 알림 — {order_code}" if is_cancel else "새 주문이 들어왔어요!"
+    delivery = order.get("delivery", {})
+    address = delivery.get("address", {})
+    address_str = address.get("address", "")
+    postcode = address.get("postcode", "")
+    address_brief = f"{postcode} {address_str}".strip() or "알 수 없음"
 
     return {
         "blocks": [
             {
                 "type": "header",
-                "text": {"type": "plain_text", "text": header_text},
+                "text": {"type": "plain_text", "text": "새 주문이 들어왔어요!"},
             },
             {
                 "type": "section",
                 "fields": [
                     {"type": "mrkdwn", "text": f"*주문번호*\n{order_code}"},
-                    {"type": "mrkdwn", "text": f"*상태*\n{status_label}"},
-                    {"type": "mrkdwn", "text": f"*결제금액*\n{price_str}"},
                     {"type": "mrkdwn", "text": f"*주문자*\n{orderer_name}"},
-                    {"type": "mrkdwn", "text": f"*상품*\n{items_str}"},
+                    {"type": "mrkdwn", "text": f"*결제금액*\n{int(payment_amount):,}원 (배송비 {int(deliv_price):,}원 포함)"},
+                    {"type": "mrkdwn", "text": f"*결제수단*\n{pay_type_label}"},
+                    {"type": "mrkdwn", "text": f"*배송지*\n{address_brief}"},
                 ],
             },
             {"type": "divider"},
@@ -133,9 +128,6 @@ def main():
     token = get_access_token()
     orders = get_recent_orders(token)
     print(f"API 반환 주문 수: {len(orders)}건")
-
-    if orders:
-        print(f"[디버그] 첫 번째 주문 원시 데이터: {json.dumps(orders[0], ensure_ascii=False, indent=2)}")
 
     new_count = 0
     for order in orders:
