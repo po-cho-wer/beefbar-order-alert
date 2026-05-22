@@ -54,21 +54,29 @@ def get_recent_orders(access_token):
 
     orders = data.get("data", {}).get("list", [])
 
+    print(f"API 반환 주문 수: {len(orders)}건")
+    print(f"cutoff_utc: {cutoff_utc.isoformat()}, cutoff_ts: {cutoff_utc.timestamp()}")
+
     cutoff_ts = cutoff_utc.timestamp()
     recent = []
     for order in orders:
         order_time = order.get("order_time", 0)
+        order_code = order.get("order_code", "?")
+        print(f"  주문 {order_code}: order_time={order_time!r} (type={type(order_time).__name__})")
         if isinstance(order_time, (int, float)) and order_time > 0:
-            # Unix timestamp은 UTC 절대값이므로 직접 비교
-            if order_time >= cutoff_ts:
+            passed = order_time >= cutoff_ts
+            print(f"    → timestamp 비교: {order_time} >= {cutoff_ts} = {passed}")
+            if passed:
                 recent.append(order)
         elif isinstance(order_time, str):
             try:
-                # 아임웹 문자열은 KST 기준 → KST aware로 파싱 후 비교
                 ot_kst = datetime.strptime(order_time[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=KST)
-                if ot_kst >= cutoff_utc:
+                passed = ot_kst >= cutoff_utc
+                print(f"    → 문자열 비교(KST): {ot_kst.isoformat()} >= {cutoff_utc.isoformat()} = {passed}")
+                if passed:
                     recent.append(order)
             except ValueError:
+                print(f"    → 파싱 실패, 포함 처리")
                 recent.append(order)
 
     return recent
