@@ -69,12 +69,19 @@ def get_order_items(access_token, order_code):
         headers={"access-token": access_token},
     )
     if res.status_code != 200:
+        print(f"상세 API 오류: {res.status_code} {res.text}")
         return []
     data = res.json()
+    print(f"[디버그] 상세 API 응답 키: {list(data.get('data', {}).keys())}")
     if data.get("code") != 200:
         return []
     order = data.get("data", {})
-    return order.get("items", [])
+    items = order.get("items", [])
+    if items:
+        print(f"[디버그] 첫 번째 상품 키: {list(items[0].keys())}")
+    else:
+        print(f"[디버그] items 없음, 전체 data 키: {list(order.keys())}")
+    return items
 
 
 PAY_TYPE_LABELS = {
