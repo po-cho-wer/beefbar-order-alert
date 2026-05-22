@@ -63,23 +63,6 @@ def get_recent_orders(access_token):
     return data.get("data", {}).get("list", [])
 
 
-def get_order_items(access_token, order_no):
-    res = requests.get(
-        "https://api.imweb.me/v2/shop/order-prods",
-        headers={"access-token": access_token},
-        params={"order_no": order_no},
-    )
-    print(f"[디버그] order-prods API 응답: {res.text[:500]}")
-    if res.status_code != 200:
-        return []
-    data = res.json()
-    if data.get("code") != 200:
-        return []
-    result = data.get("data", [])
-    if isinstance(result, dict):
-        result = result.get("list", [])
-    return result if isinstance(result, list) else []
-
 
 PAY_TYPE_LABELS = {
     "npay": "네이버페이",
@@ -93,7 +76,7 @@ PAY_TYPE_LABELS = {
 }
 
 
-def format_order_message(order, items):
+def format_order_message(order):
     order_code = order.get("order_code", "N/A")
     orderer = order.get("orderer", {})
     orderer_name = orderer.get("name", "알 수 없음")
@@ -103,11 +86,6 @@ def format_order_message(order, items):
     payment_amount = payment.get("payment_amount", 0)
     pay_type = payment.get("pay_type", "")
     pay_type_label = PAY_TYPE_LABELS.get(pay_type, pay_type or "알 수 없음")
-
-    item_names = [item.get("prod_name", "") for item in items[:3] if item.get("prod_name")]
-    items_str = ", ".join(item_names) or "상품 정보 없음"
-    if len(items) > 3:
-        items_str += f" 외 {len(items) - 3}개"
 
     return {
         "blocks": [
@@ -122,7 +100,6 @@ def format_order_message(order, items):
                     {"type": "mrkdwn", "text": f"*주문자*\n{orderer_name}"},
                     {"type": "mrkdwn", "text": f"*결제금액*\n{int(payment_amount):,}원 (배송비 {int(deliv_price):,}원 포함)"},
                     {"type": "mrkdwn", "text": f"*결제수단*\n{pay_type_label}"},
-                    {"type": "mrkdwn", "text": f"*상품*\n{items_str}"},
                 ],
             },
             {"type": "divider"},
@@ -145,18 +122,12 @@ def main():
     orders = get_recent_orders(token)
     print(f"API 반환 주문 수: {len(orders)}건")
 
-    # 첫 번째 주문으로 상세 API 구조 확인 (디버그용)
-    if orders:
-        get_order_items(token, orders[0].get("order_no", ""))
-
     new_count = 0
     for order in orders:
         order_code = order.get("order_code", "")
         if not order_code or order_code in sent_orders:
             continue
-        order_no = order.get("order_no", "")
-        items = get_order_items(token, order_no)
-        msg = format_order_message(order, items)
+        msg = format_order_message(order)
         send_slack(msg)
         sent_orders.add(order_code)
         new_count += 1
