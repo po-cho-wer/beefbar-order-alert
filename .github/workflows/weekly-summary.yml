@@ -1,9 +1,10 @@
 name: 비프바 주간 리포트
 
 on:
-  schedule:
-    - cron: '0 1 * * 1'  # 매주 월요일 10:00 KST (01:00 UTC)
-  workflow_dispatch:       # GitHub에서 수동 실행 가능
+  # Cloudflare Workers로 이전 완료 (2026-05-26) — 정시 실행 보장
+  # schedule:
+  #   - cron: '0 1 * * 1'
+  workflow_dispatch:       # 수동 실행은 유지 (긴급 시 사용)
 
 jobs:
   weekly-summary:
